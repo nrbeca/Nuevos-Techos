@@ -245,8 +245,8 @@ def main():
     st.subheader("Todas las UR en un solo archivo")
     urs_con_techo = sorted(set(techos.keys()) & set(base_df["UR"]))
     st.write(
-        f"Se generará un Excel con {len(urs_con_techo)} hojas, una por cada UR que tiene "
-        "Nuevo Techo asignado en la hoja 'Nuevos Techos' y partidas en 'Base Estimación'."
+        f"Se genera un Excel con {len(urs_con_techo)} hojas, una por cada UR "
+
     )
     if st.button("Generar Excel con todas las UR"):
         with st.spinner("Generando el archivo con todas las UR..."):
