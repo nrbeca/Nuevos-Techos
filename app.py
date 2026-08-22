@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-st.set_page_config(page_title="Distribución Nuevo Techo AC01", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Distribución Nuevo Techo AC01", page_icon="", layout="wide")
 
 # ----------------------------------------------------------------------------
 # Columnas de la hoja "Base Estimación"
@@ -128,8 +128,7 @@ def main():
     st.title(" Distribución del Nuevo Techo AC01 por Unidad Responsable")
     st.caption(
         "Carga la base (hojas 'Base Estimación' y 'Nuevos Techos'), elige la UR y descarga "
-        "el Excel con el cálculo del porcentaje, el nuevo techo y el nuevo techo redondeado, "
-        "listo con fórmulas para verificar."
+
     )
 
     uploaded = st.file_uploader("Sube el archivo base (.xlsx)", type=["xlsx"])
