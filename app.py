@@ -42,12 +42,8 @@ def load_workbook_data(file_bytes: bytes):
     return base, techos
 
 
-def build_excel(df_ur: pd.DataFrame, ur: int, nombre_ur: str, nuevo_techo: float) -> bytes:
-    """Genera el Excel descargable con fórmulas vivas, replicando el formato de 'Ejemplo'."""
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"UR {ur}"
-
+def _write_ur_sheet(ws, df_ur: pd.DataFrame, ur: int, nombre_ur: str, nuevo_techo: float):
+    """Escribe en una hoja (ya creada) el detalle de una UR, con fórmulas vivas."""
     n_rows = len(df_ur)
     first_data_row = 6
     last_data_row = first_data_row + n_rows - 1
@@ -114,6 +110,51 @@ def build_excel(df_ur: pd.DataFrame, ur: int, nombre_ur: str, nuevo_techo: float
         ws.column_dimensions[get_column_letter(i)].width = w
 
     ws.freeze_panes = f"A{first_data_row}"
+
+
+def _sheet_name_for_ur(ur: int, used: set) -> str:
+    """Genera un nombre de hoja único y válido (máx. 31 caracteres) para la UR."""
+    name = f"UR {ur}"
+    base_name = name
+    n = 1
+    while name in used:
+        n += 1
+        name = f"{base_name} ({n})"
+    used.add(name)
+    return name[:31]
+
+
+def build_excel(df_ur: pd.DataFrame, ur: int, nombre_ur: str, nuevo_techo: float) -> bytes:
+    """Genera el Excel descargable (una sola UR) con fórmulas vivas."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"UR {ur}"[:31]
+    _write_ur_sheet(ws, df_ur, ur, nombre_ur, nuevo_techo)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def build_excel_all(base_df: pd.DataFrame, techos: dict, ur_nombres: pd.DataFrame) -> bytes:
+    """Genera un solo Excel con una hoja por cada UR que tenga Nuevo Techo asignado."""
+    wb = Workbook()
+    wb.remove(wb.active)  # se irán agregando las hojas de cada UR
+
+    used_names = set()
+    urs_ordenadas = sorted(techos.keys())
+    for ur in urs_ordenadas:
+        df_ur = base_df[base_df["UR"] == ur].reset_index(drop=True)
+        if df_ur.empty:
+            continue  # UR con techo pero sin partidas en la Base Estimación
+        nombre_ur = ur_nombres.loc[ur_nombres["UR"] == ur, "Nombre UR"]
+        nombre_ur = nombre_ur.iloc[0] if len(nombre_ur) else ""
+        nuevo_techo = techos[ur]
+
+        sheet_name = _sheet_name_for_ur(ur, used_names)
+        ws = wb.create_sheet(title=sheet_name)
+        _write_ur_sheet(ws, df_ur, ur, nombre_ur, nuevo_techo)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -194,14 +235,31 @@ def main():
 
     excel_bytes = build_excel(df_ur, ur_sel, nombre_ur_sel, nuevo_techo_ur)
     st.download_button(
-        label=" Descargar Excel",
+        label=" Descargar Excel con fórmulas (esta UR)",
         data=excel_bytes,
         file_name=f"AC01_UR_{ur_sel}_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
+    st.divider()
+    st.subheader("Todas las UR en un solo archivo")
+    urs_con_techo = sorted(set(techos.keys()) & set(base_df["UR"]))
+    st.write(
+        f"Se generará un Excel con {len(urs_con_techo)} hojas, una por cada UR que tiene "
+        "Nuevo Techo asignado en la hoja 'Nuevos Techos' y partidas en 'Base Estimación'."
+    )
+    if st.button("Generar Excel con todas las UR"):
+        with st.spinner("Generando el archivo con todas las UR..."):
+            all_bytes = build_excel_all(base_df, techos, ur_nombres)
+        st.download_button(
+            label=" Descargar Excel — todas las UR",
+            data=all_bytes,
+            file_name=f"AC01_todas_las_UR_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
     if urs_sin_techo:
-        with st.sidebar.expander("URs sin Nuevo Techo"):
+        with st.sidebar.expander(" URs sin Nuevo Techo"):
             st.write(", ".join(str(u) for u in urs_sin_techo))
 
 
