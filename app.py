@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-st.set_page_config(page_title="Distribución Nuevo Techo AC01", page_icon="", layout="wide")
+st.set_page_config(page_title="Distribución Nuevo Techo AC01", page_icon="📊", layout="wide")
 
 # ----------------------------------------------------------------------------
 # Columnas de la hoja "Base Estimación"
@@ -23,6 +23,9 @@ LABEL_FONT = Font(name="Montserrat", size=10, bold=True)
 MONEY_FMT = '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-'
 PCT_FMT = "0.0%"
 
+# Partidas específicas que se excluyen siempre del cálculo (todas las UR)
+PARTIDAS_EXCLUIDAS = {39801, 39401}
+
 
 @st.cache_data(show_spinner=False)
 def load_workbook_data(file_bytes: bytes):
@@ -33,6 +36,10 @@ def load_workbook_data(file_bytes: bytes):
     base = base[[c for c in BASE_COLS if c in base.columns]].copy()
     base = base.dropna(subset=["UR"])
     base["UR"] = base["UR"].astype(int)
+
+    # Excluir partidas específicas en todas las UR (39801 y 39401)
+    base["PE"] = pd.to_numeric(base["PE"], errors="coerce")
+    base = base[~base["PE"].isin(PARTIDAS_EXCLUIDAS)].copy()
 
     techos_raw = pd.read_excel(xls, sheet_name="Nuevos Techos", header=3)
     techos_raw = techos_raw.dropna(subset=["UR"])
@@ -162,11 +169,74 @@ def build_excel_all(base_df: pd.DataFrame, techos: dict, ur_nombres: pd.DataFram
     return buf.getvalue()
 
 
+def build_excel_consolidado(base_df: pd.DataFrame, techos: dict, ur_nombres: pd.DataFrame) -> bytes:
+    """Genera un Excel de una sola hoja con todas las UR corridas en orden,
+    solo con valores (sin fórmulas)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Consolidado"
+
+    headers = BASE_COLS + ["Porcentaje", "Nuevo Techo", "Nuevo techo redondeado"]
+    for idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=idx, value=h)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    PCT_IDX = len(BASE_COLS) + 1
+    NT_IDX = len(BASE_COLS) + 2
+    NTR_IDX = len(BASE_COLS) + 3
+
+    r = 2
+    urs_ordenadas = sorted(techos.keys())
+    for ur in urs_ordenadas:
+        df_ur = base_df[base_df["UR"] == ur].reset_index(drop=True)
+        if df_ur.empty:
+            continue
+
+        nuevo_techo = techos[ur]
+        total_monto = df_ur["Monto Anual"].sum()
+
+        for _, row in df_ur.iterrows():
+            for idx, name in enumerate(BASE_COLS, start=1):
+                c = ws.cell(row=r, column=idx, value=row[name])
+                if name == "Monto Anual":
+                    c.number_format = MONEY_FMT
+
+            porcentaje = (row["Monto Anual"] / total_monto) if total_monto else 0
+            nuevo_techo_partida = nuevo_techo * porcentaje
+            nuevo_techo_redondeado = round(nuevo_techo_partida)
+
+            c = ws.cell(row=r, column=PCT_IDX, value=porcentaje)
+            c.number_format = PCT_FMT
+
+            c = ws.cell(row=r, column=NT_IDX, value=nuevo_techo_partida)
+            c.number_format = MONEY_FMT
+
+            c = ws.cell(row=r, column=NTR_IDX, value=nuevo_techo_redondeado)
+            c.number_format = MONEY_FMT
+
+            r += 1
+
+    # --- Ancho de columnas ---
+    widths = [8, 26, 5, 5, 5, 6, 7, 8, 40, 9, 5, 5, 5, 14, 15, 11, 15, 16]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{r - 1}"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 # ----------------------------------------------------------------------------
 # Interfaz
 # ----------------------------------------------------------------------------
 def main():
-    st.title(" Distribución del Nuevo Techo AC01 por Unidad Responsable")
+    st.title("Distribución del Nuevo Techo AC01 por Unidad Responsable")
     st.caption(
         "Carga la base (hojas 'Base Estimación' y 'Nuevos Techos'), elige la UR y descarga "
 
@@ -245,7 +315,7 @@ def main():
     st.subheader("Todas las UR en un solo archivo")
     urs_con_techo = sorted(set(techos.keys()) & set(base_df["UR"]))
     st.write(
-        f"Se genera un Excel con {len(urs_con_techo)} hojas, una por cada UR "
+        f"Se generará un Excel con {len(urs_con_techo)} hojas, una por cada UR que tiene "
 
     )
     if st.button("Generar Excel con todas las UR"):
@@ -255,6 +325,22 @@ def main():
             label=" Descargar Excel — todas las UR",
             data=all_bytes,
             file_name=f"AC01_todas_las_UR_{datetime.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    st.divider()
+    st.subheader("Consolidado en una sola hoja")
+    st.write(
+        "Genera un único Excel con todas las partidas de todas las UR corridas en orden "
+
+    )
+    if st.button("Generar Excel consolidado"):
+        with st.spinner("Generando el archivo consolidado..."):
+            consolidado_bytes = build_excel_consolidado(base_df, techos, ur_nombres)
+        st.download_button(
+            label=" Descargar Excel consolidado",
+            data=consolidado_bytes,
+            file_name=f"AC01_consolidado_{datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
