@@ -125,7 +125,7 @@ def build_excel(df_ur: pd.DataFrame, ur: int, nombre_ur: str, nuevo_techo: float
 # Interfaz
 # ----------------------------------------------------------------------------
 def main():
-    st.title("📊 Distribución del Nuevo Techo AC01 por Unidad Responsable")
+    st.title(" Distribución del Nuevo Techo AC01 por Unidad Responsable")
     st.caption(
         "Carga la base (hojas 'Base Estimación' y 'Nuevos Techos'), elige la UR y descarga "
         "el Excel con el cálculo del porcentaje, el nuevo techo y el nuevo techo redondeado, "
@@ -195,14 +195,14 @@ def main():
 
     excel_bytes = build_excel(df_ur, ur_sel, nombre_ur_sel, nuevo_techo_ur)
     st.download_button(
-        label="⬇️ Descargar Excel con fórmulas",
+        label=" Descargar Excel",
         data=excel_bytes,
         file_name=f"AC01_UR_{ur_sel}_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
     if urs_sin_techo:
-        with st.sidebar.expander("⚠️ URs sin Nuevo Techo"):
+        with st.sidebar.expander("URs sin Nuevo Techo"):
             st.write(", ".join(str(u) for u in urs_sin_techo))
 
 
