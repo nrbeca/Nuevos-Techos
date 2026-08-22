@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-st.set_page_config(page_title="Distribución Nuevo Techo AC01", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Distribución Nuevo Techo AC01", page_icon="", layout="wide")
 
 # ----------------------------------------------------------------------------
 # Columnas de la hoja "Base Estimación"
@@ -331,7 +331,7 @@ def main():
     st.divider()
     st.subheader("Consolidado en una sola hoja")
     st.write(
-        "Genera un único Excel con todas las partidas de todas las UR corridas en orden "
+        "Genera un único Excel con todas las partidas de todas las UR "
 
     )
     if st.button("Generar Excel consolidado"):
